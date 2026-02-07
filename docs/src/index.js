@@ -18,6 +18,14 @@ const pauseBtn = document.querySelector("[data-pause]");
 const touchControls = document.querySelector("[data-controls]");
 const rankingListEl = document.querySelector("[data-ranking-list]");
 const rankingResetBtn = document.querySelector("[data-ranking-reset]");
+const effectsEl = document.querySelector("[data-effects]");
+const gameoverPanelEl = document.querySelector("[data-gameover]");
+const gameoverScoreEl = document.querySelector("[data-gameover-score]");
+const gameoverTierEl = document.querySelector("[data-gameover-tier]");
+const gameoverCardEl = document.querySelector("[data-gameover-card]");
+const gameoverRestartBtn = document.querySelector("[data-gameover-restart]");
+const gameoverShareBtn = document.querySelector("[data-gameover-share]");
+const gameoverCloseBtn = document.querySelector("[data-gameover-close]");
 
 const KEY_TO_DIR = {
   ArrowUp: "up",
@@ -35,6 +43,14 @@ const DIR_ANGLE = { right: 0, down: 90, left: 180, up: 270 };
 const LEADERBOARD_KEY = "snake_leaderboard_v1";
 const UI_MODE_KEY = "snake_ui_mode_v1";
 const LEADERBOARD_LIMIT = 10;
+const SWIPE_THRESHOLD_PX = 28;
+const OBSTACLE_EXPLOSION_MS = 330;
+const GAMEOVER_TIERS = [
+  { minScore: 60, key: "legend", label: "Legend Tier 60+" },
+  { minScore: 50, key: "gold", label: "Gold Tier 50+" },
+  { minScore: 40, key: "silver", label: "Silver Tier 40+" },
+  { minScore: 30, key: "bronze", label: "Bronze Tier 30+" },
+];
 const SNAKE_COLOR_FILTERS = [
   "hue-rotate(0deg) saturate(1)",
   "hue-rotate(24deg) saturate(1.05)",
@@ -62,7 +78,10 @@ let runStartedAt = 0;
 let pausedStartedAt = null;
 let pausedAccumMs = 0;
 let gameOverHandled = false;
-let touchStart = null;
+let deathSequenceActive = false;
+let deathTimerId = null;
+let gameoverVisible = false;
+let gestureStart = null;
 
 function levelForScore(score) {
   return Math.floor(score / 5) + 1;
@@ -136,6 +155,10 @@ function snakeFilterForScore(score) {
 
 function directionToAngle(dir) {
   return DIR_ANGLE[dir] ?? 0;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function vectorToDir(dx, dy) {
@@ -298,6 +321,127 @@ function turnAngleForLinks(dirA, dirB) {
   return 0;
 }
 
+function clearEffects() {
+  if (!effectsEl) return;
+  effectsEl.innerHTML = "";
+}
+
+function hideGameoverPanel() {
+  gameoverVisible = false;
+  if (gameoverPanelEl) gameoverPanelEl.hidden = true;
+  if (gameoverTierEl) {
+    gameoverTierEl.hidden = true;
+    gameoverTierEl.textContent = "";
+  }
+  if (gameoverCardEl) gameoverCardEl.removeAttribute("data-tier");
+}
+
+function tierForScore(score) {
+  for (const tier of GAMEOVER_TIERS) {
+    if (score >= tier.minScore) return tier;
+  }
+  return null;
+}
+
+function createBurst(cell, { celebration = false } = {}) {
+  if (!effectsEl) return;
+  const x = Number.isFinite(cell?.x) ? clamp(cell.x, 0, state.cols - 1) : Math.floor(state.cols / 2);
+  const y = Number.isFinite(cell?.y) ? clamp(cell.y, 0, state.rows - 1) : Math.floor(state.rows / 2);
+  const xPct = ((x + 0.5) / state.cols) * 100;
+  const yPct = ((y + 0.5) / state.rows) * 100;
+
+  const burst = document.createElement("div");
+  burst.className = `explosion${celebration ? " explosion-celebration" : ""}`;
+  burst.style.setProperty("--x", `${xPct}%`);
+  burst.style.setProperty("--y", `${yPct}%`);
+
+  const flash = document.createElement("div");
+  flash.className = "explosion-flash";
+  flash.style.setProperty("--x", `${xPct}%`);
+  flash.style.setProperty("--y", `${yPct}%`);
+  burst.appendChild(flash);
+
+  if (!celebration) {
+    const core = document.createElement("div");
+    core.className = "explosion-core";
+    burst.appendChild(core);
+  }
+
+  const particleCount = celebration ? 14 : 10;
+  for (let i = 0; i < particleCount; i += 1) {
+    const angle = (Math.PI * 2 * i) / particleCount;
+    const radius = celebration ? 42 : 30;
+    const particle = document.createElement("div");
+    particle.className = "explosion-particle";
+    particle.style.setProperty("--dx", `${Math.cos(angle) * radius}px`);
+    particle.style.setProperty("--dy", `${Math.sin(angle) * radius}px`);
+    if (celebration) {
+      const color = ["#ffe699", "#ffd06b", "#ffeec0", "#ffdcb4"][i % 4];
+      particle.style.background = color;
+      particle.style.width = "5px";
+      particle.style.height = "5px";
+    }
+    burst.appendChild(particle);
+  }
+
+  effectsEl.appendChild(burst);
+  window.setTimeout(() => {
+    burst.remove();
+  }, celebration ? 460 : 380);
+}
+
+function showGameoverPanel() {
+  if (!gameoverPanelEl || !gameoverScoreEl) return;
+  gameoverScoreEl.textContent = String(state.score);
+
+  const tier = tierForScore(state.score);
+  if (tier) {
+    gameoverCardEl?.setAttribute("data-tier", tier.key);
+    if (gameoverTierEl) {
+      gameoverTierEl.hidden = false;
+      gameoverTierEl.textContent = tier.label;
+    }
+    if (tier.key === "legend") {
+      createBurst({ x: Math.floor(state.cols / 2), y: Math.floor(state.rows * 0.38) }, { celebration: true });
+    }
+  } else {
+    gameoverCardEl?.removeAttribute("data-tier");
+    if (gameoverTierEl) {
+      gameoverTierEl.hidden = true;
+      gameoverTierEl.textContent = "";
+    }
+  }
+
+  gameoverVisible = true;
+  gameoverPanelEl.hidden = false;
+}
+
+async function shareScore() {
+  if (state.alive) return;
+  const text = `Snake Arcade score: ${state.score} (Lv.${levelForScore(state.score)} / ${speedForScore(state.score)}ms)`;
+
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: "Snake Arcade", text });
+      return;
+    }
+  } catch {
+    return;
+  }
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      window.alert("Score copied to clipboard.");
+      return;
+    }
+  } catch {
+    // noop
+  }
+
+  window.prompt("Copy your score:", text);
+}
+
 function segmentVisual(i) {
   if (i === 0) {
     return { type: "head", angle: directionToAngle(state.dir) };
@@ -376,8 +520,12 @@ function render() {
   startBtn.textContent = !state.alive ? "New Game" : !gameStarted ? "Start" : state.paused ? "Resume" : "Started";
 
   if (!state.alive) {
-    overlayEl.textContent = "Game Over";
-    overlayEl.hidden = false;
+    if (deathSequenceActive || gameoverVisible) {
+      overlayEl.hidden = true;
+    } else {
+      overlayEl.textContent = "Game Over";
+      overlayEl.hidden = false;
+    }
   } else if (!gameStarted) {
     overlayEl.textContent = "Press Start";
     overlayEl.hidden = false;
@@ -393,6 +541,34 @@ function handleGameOver() {
   if (gameOverHandled) return;
   gameOverHandled = true;
   saveRunToLeaderboard();
+  showGameoverPanel();
+}
+
+function runDeathSequence() {
+  const deathInfo = state.lastDeath;
+  if (!deathInfo || deathInfo.cause !== "obstacle") {
+    handleGameOver();
+    render();
+    return;
+  }
+
+  deathSequenceActive = true;
+  boardWrapEl.classList.add("shake");
+  createBurst(deathInfo.cell);
+  render();
+
+  if (deathTimerId) {
+    window.clearTimeout(deathTimerId);
+    deathTimerId = null;
+  }
+
+  deathTimerId = window.setTimeout(() => {
+    deathTimerId = null;
+    boardWrapEl.classList.remove("shake");
+    deathSequenceActive = false;
+    handleGameOver();
+    render();
+  }, OBSTACLE_EXPLOSION_MS);
 }
 
 function loop() {
@@ -408,8 +584,7 @@ function loop() {
 
   if (wasAlive && !state.alive) {
     stop();
-    handleGameOver();
-    render();
+    runDeathSequence();
   }
 }
 
@@ -467,11 +642,19 @@ function restart() {
   reset(state);
   queuedDir = null;
   tickMs = speedForScore(state.score);
+  deathSequenceActive = false;
+  if (deathTimerId) {
+    window.clearTimeout(deathTimerId);
+    deathTimerId = null;
+  }
   gameStarted = false;
   runStartedAt = 0;
   pausedStartedAt = null;
   pausedAccumMs = 0;
   gameOverHandled = false;
+  boardWrapEl.classList.remove("shake");
+  clearEffects();
+  hideGameoverPanel();
   render();
   focusBoard();
 }
@@ -505,22 +688,50 @@ function handleKey(e) {
   }
 }
 
-function handleSwipeStart(e) {
-  if (!e.changedTouches || e.changedTouches.length === 0) return;
-  const touch = e.changedTouches[0];
-  touchStart = { x: touch.clientX, y: touch.clientY };
+function beginGesture(x, y, pointerId = null) {
+  gestureStart = { x, y, pointerId };
 }
 
-function handleSwipeEnd(e) {
-  if (!touchStart || !e.changedTouches || e.changedTouches.length === 0) return;
-  const touch = e.changedTouches[0];
-  const dx = touch.clientX - touchStart.x;
-  const dy = touch.clientY - touchStart.y;
-  touchStart = null;
+function endGesture(x, y, pointerId = null) {
+  if (!gestureStart) return;
+  if (gestureStart.pointerId !== null && pointerId !== null && gestureStart.pointerId !== pointerId) return;
+  const dx = x - gestureStart.x;
+  const dy = y - gestureStart.y;
+  gestureStart = null;
 
-  if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_THRESHOLD_PX) return;
   const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
   queueDirection(dir);
+}
+
+function handlePointerSwipeStart(e) {
+  if (e.pointerType === "mouse") return;
+  beginGesture(e.clientX, e.clientY, e.pointerId);
+  e.preventDefault();
+}
+
+function handlePointerSwipeEnd(e) {
+  if (e.pointerType === "mouse") return;
+  endGesture(e.clientX, e.clientY, e.pointerId);
+  e.preventDefault();
+}
+
+function handlePointerSwipeCancel(e) {
+  if (gestureStart && gestureStart.pointerId === e.pointerId) gestureStart = null;
+}
+
+function handleTouchSwipeStart(e) {
+  if (!e.changedTouches || e.changedTouches.length === 0) return;
+  const touch = e.changedTouches[0];
+  beginGesture(touch.clientX, touch.clientY, null);
+  e.preventDefault();
+}
+
+function handleTouchSwipeEnd(e) {
+  if (!e.changedTouches || e.changedTouches.length === 0) return;
+  const touch = e.changedTouches[0];
+  endGesture(touch.clientX, touch.clientY, null);
+  e.preventDefault();
 }
 
 startBtn.addEventListener("click", startGame);
@@ -541,10 +752,37 @@ rankingResetBtn.addEventListener("click", () => {
 document.addEventListener("keydown", handleKey);
 
 if (touchControls) {
+  touchControls.addEventListener("pointerdown", (e) => {
+    const btn = e.target.closest("button[data-dir]");
+    if (!btn) return;
+    e.preventDefault();
+    queueDirection(btn.dataset.dir);
+    focusBoard();
+  });
+
   touchControls.addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-dir]");
     if (!btn) return;
     queueDirection(btn.dataset.dir);
+    focusBoard();
+  });
+}
+
+if (gameoverRestartBtn) {
+  gameoverRestartBtn.addEventListener("click", () => {
+    restart();
+    startGame();
+  });
+}
+
+if (gameoverShareBtn) {
+  gameoverShareBtn.addEventListener("click", shareScore);
+}
+
+if (gameoverCloseBtn) {
+  gameoverCloseBtn.addEventListener("click", () => {
+    hideGameoverPanel();
+    render();
     focusBoard();
   });
 }
@@ -555,8 +793,18 @@ for (const btn of uiModeButtons) {
   });
 }
 
-boardWrapEl.addEventListener("touchstart", handleSwipeStart, { passive: true });
-boardWrapEl.addEventListener("touchend", handleSwipeEnd, { passive: true });
+boardWrapEl.addEventListener("pointerdown", handlePointerSwipeStart, { passive: false });
+boardWrapEl.addEventListener("pointerup", handlePointerSwipeEnd, { passive: false });
+boardWrapEl.addEventListener("pointercancel", handlePointerSwipeCancel, { passive: true });
+boardWrapEl.addEventListener("touchstart", handleTouchSwipeStart, { passive: false });
+boardWrapEl.addEventListener("touchend", handleTouchSwipeEnd, { passive: false });
+boardWrapEl.addEventListener(
+  "touchmove",
+  (e) => {
+    e.preventDefault();
+  },
+  { passive: false }
+);
 rootEl.addEventListener("pointerdown", focusBoard);
 window.addEventListener("resize", () => {
   if (uiModePreference === "auto") applyUiMode();

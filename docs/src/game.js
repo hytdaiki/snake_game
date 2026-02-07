@@ -41,6 +41,7 @@ function createGame({ rows = 20, cols = 20, rng = Math.random } = {}) {
     score: 0,
     alive: true,
     paused: false,
+    lastDeath: null,
     obstacles: [],
     maxObstacles: Math.max(6, Math.floor((rows * cols) / 35)),
     rng,
@@ -196,6 +197,7 @@ function setDirection(state, dir) {
 
 function step(state) {
   if (!state.alive || state.paused) return;
+  state.lastDeath = null;
   state.dir = state.nextDir;
   const vec = DIRECTIONS[state.dir];
   const head = state.snake[0];
@@ -203,6 +205,7 @@ function step(state) {
 
   if (!isInside(state, next.x, next.y)) {
     state.alive = false;
+    state.lastDeath = { cause: "wall", cell: next };
     return;
   }
 
@@ -210,6 +213,7 @@ function step(state) {
   const hitObstacle = hasObstacleAt(state, next.x, next.y);
   if (hitSelf || hitObstacle) {
     state.alive = false;
+    state.lastDeath = { cause: hitObstacle ? "obstacle" : "self", cell: next };
     return;
   }
 
@@ -235,6 +239,7 @@ function reset(state, seed) {
   state.score = fresh.score;
   state.alive = fresh.alive;
   state.paused = fresh.paused;
+  state.lastDeath = fresh.lastDeath;
   state.obstacles = fresh.obstacles;
   state.maxObstacles = fresh.maxObstacles;
   state.rng = fresh.rng;

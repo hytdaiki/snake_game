@@ -27,7 +27,21 @@
         </div>
         <div class="board-wrap" data-board-wrap tabindex="0">
           <div class="grid" data-grid></div>
+          <div class="effects-layer" data-effects aria-hidden="true"></div>
           <div class="overlay" data-overlay hidden>Paused</div>
+          <div class="gameover-panel" data-gameover hidden>
+            <div class="gameover-card" data-gameover-card>
+              <p class="gameover-title">Game Over</p>
+              <p class="gameover-score-label">Score</p>
+              <p class="gameover-score" data-gameover-score>0</p>
+              <p class="gameover-tier" data-gameover-tier hidden></p>
+              <div class="gameover-actions">
+                <button type="button" data-gameover-restart>Restart</button>
+                <button type="button" data-gameover-share>Share</button>
+                <button type="button" data-gameover-close>Close</button>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="controls">
           <button type="button" data-start>Start</button>
