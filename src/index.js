@@ -46,7 +46,7 @@ const SNAKE_COLOR_FILTERS = [
   "hue-rotate(286deg) saturate(1.2)",
 ];
 
-const state = createGame({ rows: 20, cols: 20 });
+const state = createGame({ rows: 15, cols: 15 });
 const BASE_TICK_MS = 240;
 const TICK_STEP_MS = 20;
 const MIN_TICK_MS = 80;
