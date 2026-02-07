@@ -97,10 +97,11 @@ function saveUiModePreference(mode) {
 }
 
 function detectDeviceUiMode() {
-  const narrowViewport = window.matchMedia("(max-width: 820px)").matches;
+  const narrowViewport = window.matchMedia("(max-width: 768px)").matches;
   const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
-  const noHover = window.matchMedia("(hover: none)").matches;
-  return narrowViewport || coarsePointer || noHover ? "mobile" : "desktop";
+  const touchPoints = typeof navigator.maxTouchPoints === "number" ? navigator.maxTouchPoints : 0;
+  const touchCapable = touchPoints > 0 || "ontouchstart" in window;
+  return narrowViewport || coarsePointer || touchCapable ? "mobile" : "desktop";
 }
 
 function resolveUiMode(preference) {

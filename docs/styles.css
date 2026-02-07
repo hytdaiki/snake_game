@@ -20,6 +20,7 @@ body {
   font-family: "Trebuchet MS", "Gill Sans", sans-serif;
   background: radial-gradient(circle at top, #fff8ea 0%, #f3e9d4 56%, #e7dcc7 100%);
   color: var(--ink);
+  overscroll-behavior: none;
 }
 
 main {
@@ -208,24 +209,52 @@ button:focus-visible {
   outline-offset: 1px;
 }
 
+.keyboard-label,
 .touch-controls {
-  margin-top: 6px;
+  display: none;
+}
+
+main[data-ui-mode="mobile"] .keyboard-label {
+  display: block;
+  margin-top: 10px;
+}
+
+main[data-ui-mode="mobile"] .touch-controls {
+  --dpad-size: clamp(72px, 20vw, 88px);
+  --dpad-gap: clamp(10px, 2.8vw, 14px);
+  margin: 10px auto calc(8px + env(safe-area-inset-bottom));
   display: grid;
-  grid-template-columns: repeat(3, 52px);
-  gap: 8px;
+  grid-template-columns: repeat(3, var(--dpad-size));
+  gap: var(--dpad-gap);
   width: fit-content;
+  padding: 12px;
+  border-radius: 20px;
+  border: 1px solid #ceb98f;
+  background: linear-gradient(180deg, #f8eed9 0%, #efe0bf 100%);
+  box-shadow: 0 8px 20px rgba(77, 57, 24, 0.16);
+  touch-action: none;
 }
 
-.touch-controls button {
-  padding: 10px 0;
-  font-size: 19px;
+main[data-ui-mode="mobile"] .touch-controls button {
+  min-width: var(--dpad-size);
+  min-height: var(--dpad-size);
+  padding: 0;
+  border-radius: 18px;
+  border: 1px solid #bb9c5f;
+  background: linear-gradient(180deg, #f9dd96 0%, #efc66a 100%);
+  color: #3f2f12;
+  font-size: clamp(28px, 7vw, 36px);
   line-height: 1;
-  font-weight: 700;
-  background: #f8edd8;
+  font-weight: 800;
+  box-shadow: 0 5px 0 #c79f4d, 0 10px 16px rgba(112, 79, 24, 0.2);
+  touch-action: manipulation;
+  transition: transform 100ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
 
-.keyboard-label {
-  margin-top: 8px;
+main[data-ui-mode="mobile"] .touch-controls button:active {
+  transform: scale(0.95);
+  background: linear-gradient(180deg, #f0cb75 0%, #dfa93d 100%);
+  box-shadow: 0 3px 0 #b38735, 0 6px 10px rgba(112, 79, 24, 0.22);
 }
 
 main[data-ui-mode="desktop"] .hint-mobile {
@@ -238,6 +267,7 @@ main[data-ui-mode="mobile"] .hint-desktop {
 
 main[data-ui-mode="mobile"] {
   padding: 12px;
+  overscroll-behavior: none;
 }
 
 main[data-ui-mode="mobile"] .card {
@@ -259,14 +289,9 @@ main[data-ui-mode="mobile"] button {
   padding: 10px 14px;
 }
 
-main[data-ui-mode="mobile"] .touch-controls {
-  grid-template-columns: repeat(3, 64px);
-  gap: 10px;
-}
-
-main[data-ui-mode="mobile"] .touch-controls button {
-  padding: 14px 0;
-  font-size: 24px;
+main[data-ui-mode="mobile"] .board-wrap,
+main[data-ui-mode="mobile"] .grid {
+  touch-action: none;
 }
 
 .ranking {
@@ -346,13 +371,13 @@ main[data-ui-mode="mobile"] .touch-controls button {
   }
 
   .touch-controls {
-    grid-template-columns: repeat(3, 58px);
-    gap: 8px;
+    --dpad-size: 72px;
+    --dpad-gap: 10px;
+    padding: 10px;
   }
 
   .touch-controls button {
-    font-size: 22px;
-    padding: 12px 0;
+    font-size: 30px;
   }
 
   .ranking-header {
