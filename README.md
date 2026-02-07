@@ -1,6 +1,6 @@
-# Snake Arcade - Cute Bomb Edition
+# Snake Arcade
 
-Cute illustrations + speed-up + bomb obstacles + ranking を備えた、依存なしの Snake ゲームです。  
+Snake Arcade は、cute illustrations + speed-up + bomb obstacles + ranking を備えた依存なしゲームです。  
 純粋な `HTML / CSS / JavaScript` だけで動作します。
 
 ## ゲーム概要
@@ -24,7 +24,7 @@ Cute illustrations + speed-up + bomb obstacles + ranking を備えた、依存�
 1. このフォルダに移動
 
 ```bash
-cd /Users/aa/Codex_Projects/New_project_snake
+cd /Users/aa/Codex_Projects/snake_game
 ```
 
 2. ローカルサーバーを起動
