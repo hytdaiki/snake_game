@@ -12,7 +12,12 @@ const obstaclesEl = document.querySelector("[data-obstacles]");
 const boardSizeEl = document.querySelector("[data-board-size]");
 const overlayEl = document.querySelector("[data-overlay]");
 const uiModeLabelEl = document.querySelector("[data-ui-mode-label]");
-const uiModeButtons = Array.from(document.querySelectorAll("[data-ui-mode-btn]"));
+const settingsOpenBtn = document.querySelector("[data-settings-open]");
+const settingsCloseBtn = document.querySelector("[data-settings-close]");
+const settingsBackdropEl = document.querySelector("[data-settings-backdrop]");
+const settingsPanelEl = document.querySelector("[data-settings-panel]");
+const swipeSettingEl = document.querySelector("[data-setting-swipe]");
+const uiModeSettingEls = Array.from(document.querySelectorAll("[data-setting-ui-mode]"));
 const startBtn = document.querySelector("[data-start]");
 const restartBtn = document.querySelector("[data-restart]");
 const pauseBtn = document.querySelector("[data-pause]");
@@ -46,6 +51,7 @@ const DIR_ANGLE = { right: 0, down: 90, left: 180, up: 270 };
 const LEADERBOARD_KEY = "snake_leaderboard_v1";
 const BEST_SCORE_KEY = "snake_best_score_v1";
 const UI_MODE_KEY = "snake_ui_mode_v1";
+const SWIPE_ENABLED_KEY = "snake_swipe_enabled_v1";
 const LEADERBOARD_LIMIT = 10;
 const SWIPE_THRESHOLD_PX = 28;
 const OBSTACLE_EXPLOSION_MS = 330;
@@ -79,6 +85,8 @@ let bestScore = loadBestScore();
 let leaderboard = loadLeaderboard();
 let uiModePreference = loadUiModePreference();
 let uiMode = resolveUiMode(uiModePreference);
+let swipeEnabled = loadSwipeEnabled();
+let settingsOpen = false;
 let gameStarted = false;
 let runStartedAt = 0;
 let pausedStartedAt = null;
@@ -121,6 +129,25 @@ function saveUiModePreference(mode) {
   }
 }
 
+function loadSwipeEnabled() {
+  const urlValue = new URLSearchParams(window.location.search).get("swipe");
+  if (urlValue === "1") return true;
+  if (urlValue === "0") return false;
+  try {
+    return localStorage.getItem(SWIPE_ENABLED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveSwipeEnabled(enabled) {
+  try {
+    localStorage.setItem(SWIPE_ENABLED_KEY, enabled ? "1" : "0");
+  } catch {
+    // localStorage may be unavailable in restricted modes.
+  }
+}
+
 function detectDeviceUiMode() {
   const narrowViewport = window.matchMedia("(max-width: 768px)").matches;
   const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
@@ -140,9 +167,8 @@ function applyUiMode() {
 
   const labelSuffix = uiModePreference === "auto" ? " (auto)" : "";
   if (uiModeLabelEl) uiModeLabelEl.textContent = `${uiMode}${labelSuffix}`;
-  for (const btn of uiModeButtons) {
-    const active = btn.dataset.uiModeBtn === uiModePreference;
-    btn.setAttribute("aria-pressed", String(active));
+  for (const input of uiModeSettingEls) {
+    input.checked = input.value === uiModePreference;
   }
 }
 
@@ -152,6 +178,43 @@ function setUiModePreference(nextMode) {
   uiModePreference = normalized;
   saveUiModePreference(uiModePreference);
   applyUiMode();
+}
+
+function applySwipeSettingUi() {
+  if (!swipeSettingEl) return;
+  swipeSettingEl.checked = swipeEnabled;
+}
+
+function setSwipeEnabled(nextEnabled) {
+  swipeEnabled = Boolean(nextEnabled);
+  saveSwipeEnabled(swipeEnabled);
+  applySwipeSettingUi();
+  if (!swipeEnabled) gestureStart = null;
+}
+
+function setSettingsOpen(shouldOpen) {
+  if (!settingsPanelEl || !settingsBackdropEl) return;
+  settingsOpen = shouldOpen;
+  rootEl.dataset.settingsOpen = shouldOpen ? "true" : "false";
+  settingsBackdropEl.hidden = !shouldOpen;
+  settingsPanelEl.hidden = !shouldOpen;
+  document.body.style.overflow = shouldOpen ? "hidden" : "";
+  if (shouldOpen) {
+    applySwipeSettingUi();
+    applyUiMode();
+    const focusTarget = settingsPanelEl.querySelector("input, button") || settingsCloseBtn;
+    if (focusTarget && focusTarget.focus) focusTarget.focus();
+  } else if (settingsOpenBtn && settingsOpenBtn.focus) {
+    settingsOpenBtn.focus();
+  }
+}
+
+function openSettings() {
+  setSettingsOpen(true);
+}
+
+function closeSettings() {
+  setSettingsOpen(false);
 }
 
 function snakeFilterForScore(score) {
@@ -566,10 +629,11 @@ function render() {
   speedEl.textContent = `${speedForScore(state.score)}ms`;
   obstaclesEl.textContent = String(state.obstacles.length);
   boardSizeEl.textContent = `${state.cols}x${state.rows}`;
+  rootEl.dataset.paused = state.paused && state.alive && gameStarted ? "true" : "false";
   pauseBtn.textContent = state.paused ? "Resume" : "Pause";
   pauseBtn.disabled = !state.alive || !gameStarted;
-  startBtn.disabled = state.alive && gameStarted && !state.paused;
-  startBtn.textContent = !state.alive ? "New Game" : !gameStarted ? "Start" : state.paused ? "Resume" : "Started";
+  startBtn.disabled = false;
+  startBtn.textContent = "New Game";
 
   if (!state.alive) {
     if (deathSequenceActive || gameoverVisible) {
@@ -579,7 +643,7 @@ function render() {
       overlayEl.hidden = false;
     }
   } else if (!gameStarted) {
-    overlayEl.textContent = "Press Start";
+    overlayEl.textContent = "Tap New Game";
     overlayEl.hidden = false;
   } else if (state.paused) {
     overlayEl.textContent = "Paused";
@@ -669,7 +733,13 @@ function setPaused(shouldPause) {
 }
 
 function focusBoard() {
+  if (settingsOpen) return;
   boardWrapEl.focus();
+}
+
+function newGame() {
+  restart();
+  startGame();
 }
 
 function startGame() {
@@ -713,6 +783,13 @@ function restart() {
 }
 
 function handleKey(e) {
+  if (settingsOpen) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeSettings();
+    }
+    return;
+  }
   const normalizedKey = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   const dir = KEY_TO_DIR[normalizedKey];
 
@@ -732,12 +809,12 @@ function handleKey(e) {
   }
 
   if (normalizedKey === "enter") {
-    startGame();
+    newGame();
     return;
   }
 
   if (normalizedKey === "r") {
-    restart();
+    newGame();
   }
 }
 
@@ -758,12 +835,14 @@ function endGesture(x, y, pointerId = null) {
 }
 
 function handlePointerSwipeStart(e) {
+  if (!swipeEnabled) return;
   if (e.pointerType === "mouse") return;
   beginGesture(e.clientX, e.clientY, e.pointerId);
   e.preventDefault();
 }
 
 function handlePointerSwipeEnd(e) {
+  if (!swipeEnabled) return;
   if (e.pointerType === "mouse") return;
   endGesture(e.clientX, e.clientY, e.pointerId);
   e.preventDefault();
@@ -774,6 +853,7 @@ function handlePointerSwipeCancel(e) {
 }
 
 function handleTouchSwipeStart(e) {
+  if (!swipeEnabled) return;
   if (!e.changedTouches || e.changedTouches.length === 0) return;
   const touch = e.changedTouches[0];
   beginGesture(touch.clientX, touch.clientY, null);
@@ -781,14 +861,15 @@ function handleTouchSwipeStart(e) {
 }
 
 function handleTouchSwipeEnd(e) {
+  if (!swipeEnabled) return;
   if (!e.changedTouches || e.changedTouches.length === 0) return;
   const touch = e.changedTouches[0];
   endGesture(touch.clientX, touch.clientY, null);
   e.preventDefault();
 }
 
-startBtn.addEventListener("click", startGame);
-restartBtn.addEventListener("click", restart);
+startBtn.addEventListener("click", newGame);
+restartBtn.addEventListener("click", newGame);
 pauseBtn.addEventListener("click", () => {
   setPaused(!state.paused);
 });
@@ -803,6 +884,45 @@ rankingResetBtn.addEventListener("click", () => {
 });
 
 document.addEventListener("keydown", handleKey);
+
+if (settingsOpenBtn) {
+  settingsOpenBtn.addEventListener("click", () => {
+    openSettings();
+  });
+}
+
+if (settingsCloseBtn) {
+  settingsCloseBtn.addEventListener("click", () => {
+    closeSettings();
+  });
+}
+
+if (settingsBackdropEl) {
+  settingsBackdropEl.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeSettings();
+  });
+}
+
+if (settingsPanelEl) {
+  settingsPanelEl.addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+  });
+}
+
+if (swipeSettingEl) {
+  swipeSettingEl.addEventListener("change", () => {
+    setSwipeEnabled(swipeSettingEl.checked);
+  });
+}
+
+for (const input of uiModeSettingEls) {
+  input.addEventListener("change", () => {
+    if (!input.checked) return;
+    setUiModePreference(input.value);
+  });
+}
 
 if (touchControls) {
   touchControls.addEventListener("pointerdown", (e) => {
@@ -848,12 +968,6 @@ if (gameoverCloseBtn) {
   });
 }
 
-for (const btn of uiModeButtons) {
-  btn.addEventListener("click", () => {
-    setUiModePreference(btn.dataset.uiModeBtn);
-  });
-}
-
 boardWrapEl.addEventListener("pointerdown", handlePointerSwipeStart, { passive: false });
 boardWrapEl.addEventListener("pointerup", handlePointerSwipeEnd, { passive: false });
 boardWrapEl.addEventListener("pointercancel", handlePointerSwipeCancel, { passive: true });
@@ -872,5 +986,6 @@ window.addEventListener("resize", () => {
 });
 
 applyUiMode();
+applySwipeSettingUi();
 renderLeaderboard();
 restart();
