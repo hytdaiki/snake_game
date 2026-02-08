@@ -4,6 +4,7 @@ const rootEl = document.querySelector("[data-root]");
 const boardWrapEl = document.querySelector("[data-board-wrap]");
 const gridEl = document.querySelector("[data-grid]");
 const scoreEl = document.querySelector("[data-score]");
+const bestScoreEl = document.querySelector("[data-best-score]");
 const statusEl = document.querySelector("[data-status]");
 const levelEl = document.querySelector("[data-level]");
 const speedEl = document.querySelector("[data-speed]");
@@ -21,8 +22,10 @@ const rankingResetBtn = document.querySelector("[data-ranking-reset]");
 const effectsEl = document.querySelector("[data-effects]");
 const gameoverPanelEl = document.querySelector("[data-gameover]");
 const gameoverScoreEl = document.querySelector("[data-gameover-score]");
+const gameoverBestEl = document.querySelector("[data-gameover-best]");
 const gameoverTierEl = document.querySelector("[data-gameover-tier]");
 const gameoverCardEl = document.querySelector("[data-gameover-card]");
+const gameoverContinueBtn = document.querySelector("[data-gameover-continue]");
 const gameoverRestartBtn = document.querySelector("[data-gameover-restart]");
 const gameoverShareBtn = document.querySelector("[data-gameover-share]");
 const gameoverCloseBtn = document.querySelector("[data-gameover-close]");
@@ -41,10 +44,12 @@ const KEY_TO_DIR = {
 const SCROLL_BLOCK_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "]);
 const DIR_ANGLE = { right: 0, down: 90, left: 180, up: 270 };
 const LEADERBOARD_KEY = "snake_leaderboard_v1";
+const BEST_SCORE_KEY = "snake_best_score_v1";
 const UI_MODE_KEY = "snake_ui_mode_v1";
 const LEADERBOARD_LIMIT = 10;
 const SWIPE_THRESHOLD_PX = 28;
 const OBSTACLE_EXPLOSION_MS = 330;
+const ENABLE_PLACEHOLDER_REWARDED_CONTINUE = false;
 const GAMEOVER_TIERS = [
   { minScore: 60, key: "legend", label: "Legend Tier 60+" },
   { minScore: 50, key: "gold", label: "Gold Tier 50+" },
@@ -70,6 +75,7 @@ const MIN_TICK_MS = 80;
 let tickMs = speedForScore(state.score);
 let timer = null;
 let queuedDir = null;
+let bestScore = loadBestScore();
 let leaderboard = loadLeaderboard();
 let uiModePreference = loadUiModePreference();
 let uiMode = resolveUiMode(uiModePreference);
@@ -234,6 +240,26 @@ function saveLeaderboard(entries) {
   }
 }
 
+function loadBestScore() {
+  try {
+    const raw = Number(localStorage.getItem(BEST_SCORE_KEY));
+    if (!Number.isFinite(raw) || raw < 0) return 0;
+    return Math.floor(raw);
+  } catch {
+    return 0;
+  }
+}
+
+function saveBestScore(value) {
+  const normalized = Math.max(0, Math.floor(value));
+  bestScore = normalized;
+  try {
+    localStorage.setItem(BEST_SCORE_KEY, String(normalized));
+  } catch {
+    // localStorage may be unavailable in restricted modes.
+  }
+}
+
 function renderLeaderboard() {
   rankingListEl.innerHTML = "";
   if (leaderboard.length === 0) {
@@ -393,6 +419,7 @@ function createBurst(cell, { celebration = false } = {}) {
 function showGameoverPanel() {
   if (!gameoverPanelEl || !gameoverScoreEl) return;
   gameoverScoreEl.textContent = String(state.score);
+  if (gameoverBestEl) gameoverBestEl.textContent = String(bestScore);
 
   const tier = tierForScore(state.score);
   if (tier) {
@@ -414,6 +441,30 @@ function showGameoverPanel() {
 
   gameoverVisible = true;
   gameoverPanelEl.hidden = false;
+
+  if (gameoverContinueBtn) {
+    gameoverContinueBtn.disabled = !ENABLE_PLACEHOLDER_REWARDED_CONTINUE;
+  }
+}
+
+function adContext() {
+  return {
+    score: state.score,
+    level: levelForScore(state.score),
+    speedMs: speedForScore(state.score),
+    obstacles: state.obstacles.length,
+    boardSize: `${state.cols}x${state.rows}`,
+  };
+}
+
+// Placeholder for future ad SDK (interstitial after game over, before restart).
+async function requestInterstitial(_context) {
+  return false;
+}
+
+// Placeholder for future ad SDK (rewarded continue once).
+async function requestRewardedContinue(_context) {
+  return false;
 }
 
 async function shareScore() {
@@ -509,6 +560,7 @@ function render() {
   }
 
   scoreEl.textContent = String(state.score);
+  if (bestScoreEl) bestScoreEl.textContent = String(bestScore);
   statusEl.textContent = !state.alive ? "Game Over" : !gameStarted ? "Ready" : state.paused ? "Paused" : "Running";
   levelEl.textContent = String(levelForScore(state.score));
   speedEl.textContent = `${speedForScore(state.score)}ms`;
@@ -540,6 +592,7 @@ function render() {
 function handleGameOver() {
   if (gameOverHandled) return;
   gameOverHandled = true;
+  if (state.score > bestScore) saveBestScore(state.score);
   saveRunToLeaderboard();
   showGameoverPanel();
 }
@@ -769,9 +822,17 @@ if (touchControls) {
 }
 
 if (gameoverRestartBtn) {
-  gameoverRestartBtn.addEventListener("click", () => {
+  gameoverRestartBtn.addEventListener("click", async () => {
+    await requestInterstitial(adContext());
     restart();
     startGame();
+  });
+}
+
+if (gameoverContinueBtn) {
+  gameoverContinueBtn.addEventListener("click", async () => {
+    if (!ENABLE_PLACEHOLDER_REWARDED_CONTINUE) return;
+    await requestRewardedContinue(adContext());
   });
 }
 

@@ -265,6 +265,13 @@ main {
   letter-spacing: 1px;
 }
 
+.gameover-best {
+  margin: 6px 0 0;
+  font-size: 15px;
+  color: #5f4722;
+  font-weight: 700;
+}
+
 .gameover-tier {
   margin: 8px 0 0;
   font-size: 14px;
@@ -373,6 +380,11 @@ button {
 
 button:hover {
   background: #f7ebd2;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 button:focus-visible {
