@@ -4,6 +4,7 @@ const rootEl = document.querySelector("[data-root]");
 const boardWrapEl = document.querySelector("[data-board-wrap]");
 const gridEl = document.querySelector("[data-grid]");
 const scoreEl = document.querySelector("[data-score]");
+const bestScoreEl = document.querySelector("[data-best-score]");
 const statusEl = document.querySelector("[data-status]");
 const levelEl = document.querySelector("[data-level]");
 const speedEl = document.querySelector("[data-speed]");
@@ -18,6 +19,16 @@ const pauseBtn = document.querySelector("[data-pause]");
 const touchControls = document.querySelector("[data-controls]");
 const rankingListEl = document.querySelector("[data-ranking-list]");
 const rankingResetBtn = document.querySelector("[data-ranking-reset]");
+const effectsEl = document.querySelector("[data-effects]");
+const gameoverPanelEl = document.querySelector("[data-gameover]");
+const gameoverScoreEl = document.querySelector("[data-gameover-score]");
+const gameoverBestEl = document.querySelector("[data-gameover-best]");
+const gameoverTierEl = document.querySelector("[data-gameover-tier]");
+const gameoverCardEl = document.querySelector("[data-gameover-card]");
+const gameoverContinueBtn = document.querySelector("[data-gameover-continue]");
+const gameoverRestartBtn = document.querySelector("[data-gameover-restart]");
+const gameoverShareBtn = document.querySelector("[data-gameover-share]");
+const gameoverCloseBtn = document.querySelector("[data-gameover-close]");
 
 const KEY_TO_DIR = {
   ArrowUp: "up",
@@ -33,8 +44,18 @@ const KEY_TO_DIR = {
 const SCROLL_BLOCK_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "]);
 const DIR_ANGLE = { right: 0, down: 90, left: 180, up: 270 };
 const LEADERBOARD_KEY = "snake_leaderboard_v1";
+const BEST_SCORE_KEY = "snake_best_score_v1";
 const UI_MODE_KEY = "snake_ui_mode_v1";
 const LEADERBOARD_LIMIT = 10;
+const SWIPE_THRESHOLD_PX = 28;
+const OBSTACLE_EXPLOSION_MS = 330;
+const ENABLE_PLACEHOLDER_REWARDED_CONTINUE = false;
+const GAMEOVER_TIERS = [
+  { minScore: 60, key: "legend", label: "Legend Tier 60+" },
+  { minScore: 50, key: "gold", label: "Gold Tier 50+" },
+  { minScore: 40, key: "silver", label: "Silver Tier 40+" },
+  { minScore: 30, key: "bronze", label: "Bronze Tier 30+" },
+];
 const SNAKE_COLOR_FILTERS = [
   "hue-rotate(0deg) saturate(1)",
   "hue-rotate(24deg) saturate(1.05)",
@@ -54,6 +75,7 @@ const MIN_TICK_MS = 80;
 let tickMs = speedForScore(state.score);
 let timer = null;
 let queuedDir = null;
+let bestScore = loadBestScore();
 let leaderboard = loadLeaderboard();
 let uiModePreference = loadUiModePreference();
 let uiMode = resolveUiMode(uiModePreference);
@@ -62,7 +84,10 @@ let runStartedAt = 0;
 let pausedStartedAt = null;
 let pausedAccumMs = 0;
 let gameOverHandled = false;
-let touchStart = null;
+let deathSequenceActive = false;
+let deathTimerId = null;
+let gameoverVisible = false;
+let gestureStart = null;
 
 function levelForScore(score) {
   return Math.floor(score / 5) + 1;
@@ -97,10 +122,11 @@ function saveUiModePreference(mode) {
 }
 
 function detectDeviceUiMode() {
-  const narrowViewport = window.matchMedia("(max-width: 820px)").matches;
+  const narrowViewport = window.matchMedia("(max-width: 768px)").matches;
   const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
-  const noHover = window.matchMedia("(hover: none)").matches;
-  return narrowViewport || coarsePointer || noHover ? "mobile" : "desktop";
+  const touchPoints = typeof navigator.maxTouchPoints === "number" ? navigator.maxTouchPoints : 0;
+  const touchCapable = touchPoints > 0 || "ontouchstart" in window;
+  return narrowViewport || coarsePointer || touchCapable ? "mobile" : "desktop";
 }
 
 function resolveUiMode(preference) {
@@ -135,6 +161,10 @@ function snakeFilterForScore(score) {
 
 function directionToAngle(dir) {
   return DIR_ANGLE[dir] ?? 0;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function vectorToDir(dx, dy) {
@@ -205,6 +235,26 @@ function loadLeaderboard() {
 function saveLeaderboard(entries) {
   try {
     localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(entries));
+  } catch {
+    // localStorage may be unavailable in restricted modes.
+  }
+}
+
+function loadBestScore() {
+  try {
+    const raw = Number(localStorage.getItem(BEST_SCORE_KEY));
+    if (!Number.isFinite(raw) || raw < 0) return 0;
+    return Math.floor(raw);
+  } catch {
+    return 0;
+  }
+}
+
+function saveBestScore(value) {
+  const normalized = Math.max(0, Math.floor(value));
+  bestScore = normalized;
+  try {
+    localStorage.setItem(BEST_SCORE_KEY, String(normalized));
   } catch {
     // localStorage may be unavailable in restricted modes.
   }
@@ -297,6 +347,152 @@ function turnAngleForLinks(dirA, dirB) {
   return 0;
 }
 
+function clearEffects() {
+  if (!effectsEl) return;
+  effectsEl.innerHTML = "";
+}
+
+function hideGameoverPanel() {
+  gameoverVisible = false;
+  if (gameoverPanelEl) gameoverPanelEl.hidden = true;
+  if (gameoverTierEl) {
+    gameoverTierEl.hidden = true;
+    gameoverTierEl.textContent = "";
+  }
+  if (gameoverCardEl) gameoverCardEl.removeAttribute("data-tier");
+}
+
+function tierForScore(score) {
+  for (const tier of GAMEOVER_TIERS) {
+    if (score >= tier.minScore) return tier;
+  }
+  return null;
+}
+
+function createBurst(cell, { celebration = false } = {}) {
+  if (!effectsEl) return;
+  const x = Number.isFinite(cell?.x) ? clamp(cell.x, 0, state.cols - 1) : Math.floor(state.cols / 2);
+  const y = Number.isFinite(cell?.y) ? clamp(cell.y, 0, state.rows - 1) : Math.floor(state.rows / 2);
+  const xPct = ((x + 0.5) / state.cols) * 100;
+  const yPct = ((y + 0.5) / state.rows) * 100;
+
+  const burst = document.createElement("div");
+  burst.className = `explosion${celebration ? " explosion-celebration" : ""}`;
+  burst.style.setProperty("--x", `${xPct}%`);
+  burst.style.setProperty("--y", `${yPct}%`);
+
+  const flash = document.createElement("div");
+  flash.className = "explosion-flash";
+  flash.style.setProperty("--x", `${xPct}%`);
+  flash.style.setProperty("--y", `${yPct}%`);
+  burst.appendChild(flash);
+
+  if (!celebration) {
+    const core = document.createElement("div");
+    core.className = "explosion-core";
+    burst.appendChild(core);
+  }
+
+  const particleCount = celebration ? 14 : 10;
+  for (let i = 0; i < particleCount; i += 1) {
+    const angle = (Math.PI * 2 * i) / particleCount;
+    const radius = celebration ? 42 : 30;
+    const particle = document.createElement("div");
+    particle.className = "explosion-particle";
+    particle.style.setProperty("--dx", `${Math.cos(angle) * radius}px`);
+    particle.style.setProperty("--dy", `${Math.sin(angle) * radius}px`);
+    if (celebration) {
+      const color = ["#ffe699", "#ffd06b", "#ffeec0", "#ffdcb4"][i % 4];
+      particle.style.background = color;
+      particle.style.width = "5px";
+      particle.style.height = "5px";
+    }
+    burst.appendChild(particle);
+  }
+
+  effectsEl.appendChild(burst);
+  window.setTimeout(() => {
+    burst.remove();
+  }, celebration ? 460 : 380);
+}
+
+function showGameoverPanel() {
+  if (!gameoverPanelEl || !gameoverScoreEl) return;
+  gameoverScoreEl.textContent = String(state.score);
+  if (gameoverBestEl) gameoverBestEl.textContent = String(bestScore);
+
+  const tier = tierForScore(state.score);
+  if (tier) {
+    gameoverCardEl?.setAttribute("data-tier", tier.key);
+    if (gameoverTierEl) {
+      gameoverTierEl.hidden = false;
+      gameoverTierEl.textContent = tier.label;
+    }
+    if (tier.key === "legend") {
+      createBurst({ x: Math.floor(state.cols / 2), y: Math.floor(state.rows * 0.38) }, { celebration: true });
+    }
+  } else {
+    gameoverCardEl?.removeAttribute("data-tier");
+    if (gameoverTierEl) {
+      gameoverTierEl.hidden = true;
+      gameoverTierEl.textContent = "";
+    }
+  }
+
+  gameoverVisible = true;
+  gameoverPanelEl.hidden = false;
+
+  if (gameoverContinueBtn) {
+    gameoverContinueBtn.disabled = !ENABLE_PLACEHOLDER_REWARDED_CONTINUE;
+  }
+}
+
+function adContext() {
+  return {
+    score: state.score,
+    level: levelForScore(state.score),
+    speedMs: speedForScore(state.score),
+    obstacles: state.obstacles.length,
+    boardSize: `${state.cols}x${state.rows}`,
+  };
+}
+
+// Placeholder for future ad SDK (interstitial after game over, before restart).
+async function requestInterstitial(_context) {
+  return false;
+}
+
+// Placeholder for future ad SDK (rewarded continue once).
+async function requestRewardedContinue(_context) {
+  return false;
+}
+
+async function shareScore() {
+  if (state.alive) return;
+  const text = `Snake Arcade score: ${state.score} (Lv.${levelForScore(state.score)} / ${speedForScore(state.score)}ms)`;
+
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: "Snake Arcade", text });
+      return;
+    }
+  } catch {
+    return;
+  }
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      window.alert("Score copied to clipboard.");
+      return;
+    }
+  } catch {
+    // noop
+  }
+
+  window.prompt("Copy your score:", text);
+}
+
 function segmentVisual(i) {
   if (i === 0) {
     return { type: "head", angle: directionToAngle(state.dir) };
@@ -364,6 +560,7 @@ function render() {
   }
 
   scoreEl.textContent = String(state.score);
+  if (bestScoreEl) bestScoreEl.textContent = String(bestScore);
   statusEl.textContent = !state.alive ? "Game Over" : !gameStarted ? "Ready" : state.paused ? "Paused" : "Running";
   levelEl.textContent = String(levelForScore(state.score));
   speedEl.textContent = `${speedForScore(state.score)}ms`;
@@ -375,8 +572,12 @@ function render() {
   startBtn.textContent = !state.alive ? "New Game" : !gameStarted ? "Start" : state.paused ? "Resume" : "Started";
 
   if (!state.alive) {
-    overlayEl.textContent = "Game Over";
-    overlayEl.hidden = false;
+    if (deathSequenceActive || gameoverVisible) {
+      overlayEl.hidden = true;
+    } else {
+      overlayEl.textContent = "Game Over";
+      overlayEl.hidden = false;
+    }
   } else if (!gameStarted) {
     overlayEl.textContent = "Press Start";
     overlayEl.hidden = false;
@@ -391,7 +592,36 @@ function render() {
 function handleGameOver() {
   if (gameOverHandled) return;
   gameOverHandled = true;
+  if (state.score > bestScore) saveBestScore(state.score);
   saveRunToLeaderboard();
+  showGameoverPanel();
+}
+
+function runDeathSequence() {
+  const deathInfo = state.lastDeath;
+  if (!deathInfo || deathInfo.cause !== "obstacle") {
+    handleGameOver();
+    render();
+    return;
+  }
+
+  deathSequenceActive = true;
+  boardWrapEl.classList.add("shake");
+  createBurst(deathInfo.cell);
+  render();
+
+  if (deathTimerId) {
+    window.clearTimeout(deathTimerId);
+    deathTimerId = null;
+  }
+
+  deathTimerId = window.setTimeout(() => {
+    deathTimerId = null;
+    boardWrapEl.classList.remove("shake");
+    deathSequenceActive = false;
+    handleGameOver();
+    render();
+  }, OBSTACLE_EXPLOSION_MS);
 }
 
 function loop() {
@@ -407,8 +637,7 @@ function loop() {
 
   if (wasAlive && !state.alive) {
     stop();
-    handleGameOver();
-    render();
+    runDeathSequence();
   }
 }
 
@@ -466,11 +695,19 @@ function restart() {
   reset(state);
   queuedDir = null;
   tickMs = speedForScore(state.score);
+  deathSequenceActive = false;
+  if (deathTimerId) {
+    window.clearTimeout(deathTimerId);
+    deathTimerId = null;
+  }
   gameStarted = false;
   runStartedAt = 0;
   pausedStartedAt = null;
   pausedAccumMs = 0;
   gameOverHandled = false;
+  boardWrapEl.classList.remove("shake");
+  clearEffects();
+  hideGameoverPanel();
   render();
   focusBoard();
 }
@@ -504,22 +741,50 @@ function handleKey(e) {
   }
 }
 
-function handleSwipeStart(e) {
-  if (!e.changedTouches || e.changedTouches.length === 0) return;
-  const touch = e.changedTouches[0];
-  touchStart = { x: touch.clientX, y: touch.clientY };
+function beginGesture(x, y, pointerId = null) {
+  gestureStart = { x, y, pointerId };
 }
 
-function handleSwipeEnd(e) {
-  if (!touchStart || !e.changedTouches || e.changedTouches.length === 0) return;
-  const touch = e.changedTouches[0];
-  const dx = touch.clientX - touchStart.x;
-  const dy = touch.clientY - touchStart.y;
-  touchStart = null;
+function endGesture(x, y, pointerId = null) {
+  if (!gestureStart) return;
+  if (gestureStart.pointerId !== null && pointerId !== null && gestureStart.pointerId !== pointerId) return;
+  const dx = x - gestureStart.x;
+  const dy = y - gestureStart.y;
+  gestureStart = null;
 
-  if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_THRESHOLD_PX) return;
   const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
   queueDirection(dir);
+}
+
+function handlePointerSwipeStart(e) {
+  if (e.pointerType === "mouse") return;
+  beginGesture(e.clientX, e.clientY, e.pointerId);
+  e.preventDefault();
+}
+
+function handlePointerSwipeEnd(e) {
+  if (e.pointerType === "mouse") return;
+  endGesture(e.clientX, e.clientY, e.pointerId);
+  e.preventDefault();
+}
+
+function handlePointerSwipeCancel(e) {
+  if (gestureStart && gestureStart.pointerId === e.pointerId) gestureStart = null;
+}
+
+function handleTouchSwipeStart(e) {
+  if (!e.changedTouches || e.changedTouches.length === 0) return;
+  const touch = e.changedTouches[0];
+  beginGesture(touch.clientX, touch.clientY, null);
+  e.preventDefault();
+}
+
+function handleTouchSwipeEnd(e) {
+  if (!e.changedTouches || e.changedTouches.length === 0) return;
+  const touch = e.changedTouches[0];
+  endGesture(touch.clientX, touch.clientY, null);
+  e.preventDefault();
 }
 
 startBtn.addEventListener("click", startGame);
@@ -540,10 +805,45 @@ rankingResetBtn.addEventListener("click", () => {
 document.addEventListener("keydown", handleKey);
 
 if (touchControls) {
+  touchControls.addEventListener("pointerdown", (e) => {
+    const btn = e.target.closest("button[data-dir]");
+    if (!btn) return;
+    e.preventDefault();
+    queueDirection(btn.dataset.dir);
+    focusBoard();
+  });
+
   touchControls.addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-dir]");
     if (!btn) return;
     queueDirection(btn.dataset.dir);
+    focusBoard();
+  });
+}
+
+if (gameoverRestartBtn) {
+  gameoverRestartBtn.addEventListener("click", async () => {
+    await requestInterstitial(adContext());
+    restart();
+    startGame();
+  });
+}
+
+if (gameoverContinueBtn) {
+  gameoverContinueBtn.addEventListener("click", async () => {
+    if (!ENABLE_PLACEHOLDER_REWARDED_CONTINUE) return;
+    await requestRewardedContinue(adContext());
+  });
+}
+
+if (gameoverShareBtn) {
+  gameoverShareBtn.addEventListener("click", shareScore);
+}
+
+if (gameoverCloseBtn) {
+  gameoverCloseBtn.addEventListener("click", () => {
+    hideGameoverPanel();
+    render();
     focusBoard();
   });
 }
@@ -554,8 +854,18 @@ for (const btn of uiModeButtons) {
   });
 }
 
-boardWrapEl.addEventListener("touchstart", handleSwipeStart, { passive: true });
-boardWrapEl.addEventListener("touchend", handleSwipeEnd, { passive: true });
+boardWrapEl.addEventListener("pointerdown", handlePointerSwipeStart, { passive: false });
+boardWrapEl.addEventListener("pointerup", handlePointerSwipeEnd, { passive: false });
+boardWrapEl.addEventListener("pointercancel", handlePointerSwipeCancel, { passive: true });
+boardWrapEl.addEventListener("touchstart", handleTouchSwipeStart, { passive: false });
+boardWrapEl.addEventListener("touchend", handleTouchSwipeEnd, { passive: false });
+boardWrapEl.addEventListener(
+  "touchmove",
+  (e) => {
+    e.preventDefault();
+  },
+  { passive: false }
+);
 rootEl.addEventListener("pointerdown", focusBoard);
 window.addEventListener("resize", () => {
   if (uiModePreference === "auto") applyUiMode();

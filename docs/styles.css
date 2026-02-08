@@ -20,6 +20,7 @@ body {
   font-family: "Trebuchet MS", "Gill Sans", sans-serif;
   background: radial-gradient(circle at top, #fff8ea 0%, #f3e9d4 56%, #e7dcc7 100%);
   color: var(--ink);
+  overscroll-behavior: none;
 }
 
 main {
@@ -73,6 +74,10 @@ main {
 
 .board-wrap:focus-visible {
   box-shadow: 0 0 0 3px rgba(39, 80, 156, 0.35);
+}
+
+.board-wrap.shake {
+  animation: board-shake 220ms ease-in-out;
 }
 
 .grid {
@@ -155,6 +160,180 @@ main {
   display: none;
 }
 
+.effects-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.explosion {
+  --x: 50%;
+  --y: 50%;
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: 0;
+  height: 0;
+}
+
+.explosion-core {
+  position: absolute;
+  left: -8px;
+  top: -8px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff4c1 0%, #ffc96b 55%, rgba(255, 145, 65, 0.18) 100%);
+  animation: explode-core 320ms ease-out forwards;
+}
+
+.explosion-particle {
+  --dx: 0px;
+  --dy: -24px;
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f7bf5d;
+  animation: explode-particle 340ms ease-out forwards;
+}
+
+.explosion-flash {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at var(--x) var(--y), rgba(255, 240, 193, 0.34) 0%, rgba(255, 240, 193, 0.04) 34%, rgba(255, 240, 193, 0) 62%);
+  animation: explode-flash 260ms ease-out forwards;
+}
+
+.explosion.explosion-celebration .explosion-flash {
+  display: none;
+}
+
+.explosion.explosion-celebration .explosion-particle {
+  animation-duration: 430ms;
+}
+
+.gameover-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(24, 20, 15, 0.42);
+}
+
+.gameover-panel[hidden] {
+  display: none;
+}
+
+.gameover-card {
+  width: min(440px, 100%);
+  border: 2px solid #d3c39d;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fff4da 0%, #f0debe 100%);
+  color: #352610;
+  padding: 20px 18px 16px;
+  text-align: center;
+  box-shadow: 0 16px 38px rgba(36, 22, 8, 0.34);
+}
+
+.gameover-title {
+  margin: 0;
+  font-size: clamp(30px, 5vw, 44px);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.gameover-score-label {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: #6c5530;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.gameover-score {
+  margin: 2px 0 0;
+  font-size: clamp(54px, 10vw, 74px);
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.gameover-best {
+  margin: 6px 0 0;
+  font-size: 15px;
+  color: #5f4722;
+  font-weight: 700;
+}
+
+.gameover-tier {
+  margin: 8px 0 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.gameover-actions {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.gameover-card[data-tier="bronze"] {
+  border-color: #bd7f49;
+  box-shadow: 0 0 0 2px rgba(190, 126, 76, 0.22), 0 14px 36px rgba(74, 45, 18, 0.38);
+}
+
+.gameover-card[data-tier="silver"] {
+  border-color: #b2bdc8;
+  box-shadow: 0 0 0 2px rgba(183, 196, 210, 0.26), 0 0 22px rgba(194, 206, 222, 0.24), 0 14px 36px rgba(53, 58, 63, 0.3);
+}
+
+.gameover-card[data-tier="gold"] {
+  border-color: #d8bb59;
+  box-shadow: 0 0 0 2px rgba(228, 197, 86, 0.3), 0 0 26px rgba(255, 219, 106, 0.28), 0 14px 36px rgba(97, 73, 17, 0.35);
+  animation: gold-shimmer 2.1s linear infinite;
+}
+
+.gameover-card[data-tier="legend"] {
+  position: relative;
+  overflow: hidden;
+  border-color: #f2d77a;
+  box-shadow: 0 0 0 2px rgba(245, 218, 109, 0.32), 0 0 30px rgba(255, 227, 125, 0.3), 0 16px 40px rgba(95, 65, 16, 0.4);
+}
+
+.gameover-card[data-tier="legend"]::before,
+.gameover-card[data-tier="legend"]::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: #ffe8a5;
+  opacity: 0.8;
+  animation: legend-spark 1.5s ease-in-out infinite;
+}
+
+.gameover-card[data-tier="legend"]::before {
+  top: 12px;
+  left: 18px;
+}
+
+.gameover-card[data-tier="legend"]::after {
+  top: 16px;
+  right: 16px;
+  animation-delay: 0.65s;
+}
+
 .controls {
   margin-top: 12px;
   display: flex;
@@ -203,29 +382,63 @@ button:hover {
   background: #f7ebd2;
 }
 
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 button:focus-visible {
   outline: 2px solid rgba(40, 97, 197, 0.35);
   outline-offset: 1px;
 }
 
+.keyboard-label,
 .touch-controls {
-  margin-top: 6px;
+  display: none;
+}
+
+main[data-ui-mode="mobile"] .keyboard-label {
+  display: block;
+  margin-top: 10px;
+}
+
+main[data-ui-mode="mobile"] .touch-controls {
+  --dpad-size: clamp(72px, 20vw, 88px);
+  --dpad-gap: clamp(10px, 2.8vw, 14px);
+  margin: 10px auto calc(8px + env(safe-area-inset-bottom));
   display: grid;
-  grid-template-columns: repeat(3, 52px);
-  gap: 8px;
+  grid-template-columns: repeat(3, var(--dpad-size));
+  gap: var(--dpad-gap);
   width: fit-content;
+  padding: 12px;
+  border-radius: 20px;
+  border: 1px solid #ceb98f;
+  background: linear-gradient(180deg, #f8eed9 0%, #efe0bf 100%);
+  box-shadow: 0 8px 20px rgba(77, 57, 24, 0.16);
+  touch-action: none;
+  user-select: none;
 }
 
-.touch-controls button {
-  padding: 10px 0;
-  font-size: 19px;
+main[data-ui-mode="mobile"] .touch-controls button {
+  min-width: var(--dpad-size);
+  min-height: var(--dpad-size);
+  padding: 0;
+  border-radius: 18px;
+  border: 1px solid #bb9c5f;
+  background: linear-gradient(180deg, #f9dd96 0%, #efc66a 100%);
+  color: #3f2f12;
+  font-size: clamp(28px, 7vw, 36px);
   line-height: 1;
-  font-weight: 700;
-  background: #f8edd8;
+  font-weight: 800;
+  box-shadow: 0 5px 0 #c79f4d, 0 10px 16px rgba(112, 79, 24, 0.2);
+  touch-action: manipulation;
+  transition: transform 100ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
 
-.keyboard-label {
-  margin-top: 8px;
+main[data-ui-mode="mobile"] .touch-controls button:active {
+  transform: scale(0.95);
+  background: linear-gradient(180deg, #f0cb75 0%, #dfa93d 100%);
+  box-shadow: 0 3px 0 #b38735, 0 6px 10px rgba(112, 79, 24, 0.22);
 }
 
 main[data-ui-mode="desktop"] .hint-mobile {
@@ -238,6 +451,7 @@ main[data-ui-mode="mobile"] .hint-desktop {
 
 main[data-ui-mode="mobile"] {
   padding: 12px;
+  overscroll-behavior: none;
 }
 
 main[data-ui-mode="mobile"] .card {
@@ -259,14 +473,18 @@ main[data-ui-mode="mobile"] button {
   padding: 10px 14px;
 }
 
-main[data-ui-mode="mobile"] .touch-controls {
-  grid-template-columns: repeat(3, 64px);
-  gap: 10px;
+main[data-ui-mode="mobile"] .board-wrap,
+main[data-ui-mode="mobile"] .grid {
+  touch-action: none;
 }
 
-main[data-ui-mode="mobile"] .touch-controls button {
-  padding: 14px 0;
-  font-size: 24px;
+main[data-ui-mode="mobile"] .gameover-card {
+  width: min(360px, 100%);
+  padding: 16px 14px 14px;
+}
+
+main[data-ui-mode="mobile"] .gameover-score {
+  font-size: clamp(62px, 18vw, 88px);
 }
 
 .ranking {
@@ -346,13 +564,13 @@ main[data-ui-mode="mobile"] .touch-controls button {
   }
 
   .touch-controls {
-    grid-template-columns: repeat(3, 58px);
-    gap: 8px;
+    --dpad-size: 72px;
+    --dpad-gap: 10px;
+    padding: 10px;
   }
 
   .touch-controls button {
-    font-size: 22px;
-    padding: 12px 0;
+    font-size: 30px;
   }
 
   .ranking-header {
@@ -362,5 +580,86 @@ main[data-ui-mode="mobile"] .touch-controls button {
 
   .ranking-list {
     padding-left: 18px;
+  }
+}
+
+@keyframes board-shake {
+  0% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px);
+  }
+  40% {
+    transform: translateX(3px);
+  }
+  60% {
+    transform: translateX(-2px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes explode-core {
+  0% {
+    transform: scale(0.35);
+    opacity: 0.9;
+  }
+  60% {
+    transform: scale(2.8);
+    opacity: 0.62;
+  }
+  100% {
+    transform: scale(4.1);
+    opacity: 0;
+  }
+}
+
+@keyframes explode-particle {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy)) scale(0.2);
+    opacity: 0;
+  }
+}
+
+@keyframes explode-flash {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes gold-shimmer {
+  0%,
+  100% {
+    filter: saturate(1);
+  }
+  50% {
+    filter: saturate(1.15) brightness(1.05);
+  }
+}
+
+@keyframes legend-spark {
+  0%,
+  100% {
+    transform: scale(0.6) rotate(0deg);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1) rotate(40deg);
+    opacity: 0.9;
   }
 }
