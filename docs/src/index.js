@@ -96,6 +96,39 @@ let deathSequenceActive = false;
 let deathTimerId = null;
 let gameoverVisible = false;
 let gestureStart = null;
+let lastBoardWrapW = 0;
+let lastBoardWrapH = 0;
+let lastBoardPx = 0;
+
+function syncBoardSize() {
+  if (!boardWrapEl || !gridEl) return;
+  if (uiMode !== "mobile") {
+    if (lastBoardPx) {
+      gridEl.style.width = "";
+      gridEl.style.height = "";
+    }
+    lastBoardWrapW = 0;
+    lastBoardWrapH = 0;
+    lastBoardPx = 0;
+    return;
+  }
+
+  const w = boardWrapEl.clientWidth;
+  const h = boardWrapEl.clientHeight;
+  if (!w || !h) return;
+  if (w === lastBoardWrapW && h === lastBoardWrapH) return;
+
+  lastBoardWrapW = w;
+  lastBoardWrapH = h;
+  const size = Math.floor(Math.min(w, h));
+  if (!size) return;
+  if (size === lastBoardPx) return;
+  lastBoardPx = size;
+
+  gridEl.style.width = `${size}px`;
+  gridEl.style.height = `${size}px`;
+}
+
 
 function levelForScore(score) {
   return Math.floor(score / 5) + 1;
@@ -170,6 +203,7 @@ function applyUiMode() {
   for (const input of uiModeSettingEls) {
     input.checked = input.value === uiModePreference;
   }
+  syncBoardSize();
 }
 
 function setUiModePreference(nextMode) {
@@ -595,6 +629,7 @@ function buildSnakeMap() {
 }
 
 function render() {
+  syncBoardSize();
   gridEl.style.setProperty("--rows", state.rows);
   gridEl.style.setProperty("--cols", state.cols);
   gridEl.style.setProperty("--snake-filter", snakeFilterForScore(state.score));
@@ -983,6 +1018,7 @@ boardWrapEl.addEventListener(
 rootEl.addEventListener("pointerdown", focusBoard);
 window.addEventListener("resize", () => {
   if (uiModePreference === "auto") applyUiMode();
+  syncBoardSize();
 });
 
 applyUiMode();
