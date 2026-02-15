@@ -58,6 +58,7 @@ const UI_MODE_KEY = "snake_ui_mode_v1";
 const SWIPE_ENABLED_KEY = "snake_swipe_enabled_v1";
 const ADS_REMOVED_KEY = "snake_ads_removed_v1";
 const NATIVE_ENTITLEMENT_EVENT = "snake-storekit-entitlement";
+const POST_RUN_INTERSTITIAL_SECONDS = 15;
 const LEADERBOARD_LIMIT = 10;
 const SWIPE_THRESHOLD_PX = 28;
 const OBSTACLE_EXPLOSION_MS = 330;
@@ -96,6 +97,10 @@ let adsRemoved = loadAdsRemoved();
 let shouldShowAds = !adsRemoved;
 let purchaseActionPending = false;
 let nativeEntitlementListenerBound = false;
+let postRunAdActive = false;
+let postRunAdRemainingSec = 0;
+let postRunAdTimerId = null;
+let postRunAdToken = 0;
 let settingsOpen = false;
 let gameStarted = false;
 let runStartedAt = 0;
@@ -221,6 +226,12 @@ function getNativePurchaseBridge() {
   return bridge;
 }
 
+function getNativeAdsBridge() {
+  const bridge = window.SnakeAdsBridge;
+  if (!bridge || typeof bridge !== "object") return null;
+  return bridge;
+}
+
 function bindNativeEntitlementListener() {
   if (nativeEntitlementListenerBound) return;
   nativeEntitlementListenerBound = true;
@@ -252,6 +263,57 @@ function setAdsRemoved(nextRemoved) {
 function setPurchaseActionPending(isPending) {
   purchaseActionPending = Boolean(isPending);
   applyAdsUi();
+}
+
+function clearPostRunAdTimer() {
+  if (!postRunAdTimerId) return;
+  window.clearInterval(postRunAdTimerId);
+  postRunAdTimerId = null;
+}
+
+function setPostRunAdState(active, remainingSec = 0) {
+  postRunAdActive = Boolean(active);
+  postRunAdRemainingSec = Math.max(0, Math.floor(remainingSec));
+  rootEl.dataset.postRunAd = postRunAdActive ? "true" : "false";
+  if (postRunAdActive && settingsOpen) closeSettings();
+}
+
+function cancelPostRunInterstitial() {
+  postRunAdToken += 1;
+  clearPostRunAdTimer();
+  setPostRunAdState(false, 0);
+}
+
+async function runMockPostRunInterstitial(durationSec = POST_RUN_INTERSTITIAL_SECONDS) {
+  const seconds = Math.max(0, Math.floor(durationSec));
+  if (!seconds) return false;
+
+  const token = ++postRunAdToken;
+  setPostRunAdState(true, seconds);
+  render();
+
+  await new Promise((resolve) => {
+    clearPostRunAdTimer();
+    postRunAdTimerId = window.setInterval(() => {
+      if (token !== postRunAdToken) {
+        clearPostRunAdTimer();
+        resolve();
+        return;
+      }
+
+      postRunAdRemainingSec = Math.max(0, postRunAdRemainingSec - 1);
+      render();
+      if (postRunAdRemainingSec <= 0) {
+        clearPostRunAdTimer();
+        resolve();
+      }
+    }, 1000);
+  });
+
+  if (token !== postRunAdToken) return false;
+  setPostRunAdState(false, 0);
+  render();
+  return true;
 }
 
 function detectDeviceUiMode() {
@@ -300,6 +362,7 @@ function setSwipeEnabled(nextEnabled) {
 }
 
 function setSettingsOpen(shouldOpen) {
+  if (shouldOpen && postRunAdActive) return;
   if (!settingsPanelEl || !settingsBackdropEl) return;
   settingsOpen = shouldOpen;
   rootEl.dataset.settingsOpen = shouldOpen ? "true" : "false";
@@ -493,7 +556,7 @@ function beginRunClock() {
 }
 
 function queueDirection(dir) {
-  if (!gameStarted || !state.alive || state.paused) return;
+  if (!gameStarted || !state.alive || state.paused || postRunAdActive) return;
   if (!dir) return;
   if (!queuedDir) queuedDir = dir;
 }
@@ -628,8 +691,32 @@ function adContext() {
 }
 
 // Placeholder for future ad SDK (interstitial after game over, before restart).
-async function requestInterstitial(_context) {
-  return false;
+async function requestInterstitial(context) {
+  if (!shouldShowAds) {
+    return { shown: false, source: "disabled" };
+  }
+
+  const nativeBridge = getNativeAdsBridge();
+  if (nativeBridge && typeof nativeBridge.showInterstitial === "function") {
+    try {
+      const result = await nativeBridge.showInterstitial({
+        durationSec: POST_RUN_INTERSTITIAL_SECONDS,
+        context,
+      });
+      if (typeof result === "boolean") {
+        if (result) return { shown: true, source: "native" };
+      } else if (result && typeof result === "object") {
+        if (result.shown !== false) return result;
+      } else {
+        return { shown: true, source: "native" };
+      }
+    } catch {
+      // Fall through to the web mock when native bridge fails.
+    }
+  }
+
+  await runMockPostRunInterstitial(POST_RUN_INTERSTITIAL_SECONDS);
+  return { shown: true, source: "mock", durationSec: POST_RUN_INTERSTITIAL_SECONDS };
 }
 
 // Placeholder for future ad SDK (rewarded continue once).
@@ -802,13 +889,27 @@ function render() {
   obstaclesEl.textContent = String(state.obstacles.length);
   boardSizeEl.textContent = `${state.cols}x${state.rows}`;
   rootEl.dataset.paused = state.paused && state.alive && gameStarted ? "true" : "false";
+  const controlsLocked = postRunAdActive || purchaseActionPending;
   pauseBtn.textContent = state.paused ? "Resume" : "Pause";
-  pauseBtn.disabled = !state.alive || !gameStarted;
-  startBtn.disabled = false;
+  pauseBtn.disabled = controlsLocked || !state.alive || !gameStarted;
+  startBtn.disabled = controlsLocked;
   startBtn.textContent = "New Game";
+  restartBtn.disabled = controlsLocked;
+  if (settingsOpenBtn) settingsOpenBtn.disabled = postRunAdActive;
+  if (rankingResetBtn) rankingResetBtn.disabled = postRunAdActive;
+  if (touchControls) {
+    const dpadButtons = touchControls.querySelectorAll("button[data-dir]");
+    for (const btn of dpadButtons) btn.disabled = postRunAdActive;
+  }
+  if (postRunAdActive) {
+    statusEl.textContent = "Ad break";
+  }
 
   if (!state.alive) {
-    if (deathSequenceActive || gameoverVisible) {
+    if (postRunAdActive) {
+      overlayEl.textContent = `Ad ${postRunAdRemainingSec}s`;
+      overlayEl.hidden = false;
+    } else if (deathSequenceActive || gameoverVisible) {
       overlayEl.hidden = true;
     } else {
       overlayEl.textContent = "Game Over";
@@ -830,7 +931,14 @@ function handleGameOver() {
   gameOverHandled = true;
   if (state.score > bestScore) saveBestScore(state.score);
   saveRunToLeaderboard();
-  showGameoverPanel();
+  hideGameoverPanel();
+  void (async () => {
+    await requestInterstitial(adContext());
+    if (!state.alive && gameOverHandled) {
+      showGameoverPanel();
+      render();
+    }
+  })();
 }
 
 function runDeathSequence() {
@@ -889,7 +997,7 @@ function stop() {
 }
 
 function setPaused(shouldPause) {
-  if (!state.alive || !gameStarted) return;
+  if (postRunAdActive || !state.alive || !gameStarted) return;
   if (state.paused === shouldPause) return;
 
   state.paused = shouldPause;
@@ -905,16 +1013,18 @@ function setPaused(shouldPause) {
 }
 
 function focusBoard() {
-  if (settingsOpen) return;
+  if (settingsOpen || postRunAdActive) return;
   boardWrapEl.focus();
 }
 
 function newGame() {
+  if (postRunAdActive) return;
   restart();
   startGame();
 }
 
 function startGame() {
+  if (postRunAdActive) return;
   if (!state.alive) {
     restart();
   }
@@ -933,6 +1043,7 @@ function startGame() {
 }
 
 function restart() {
+  cancelPostRunInterstitial();
   stop();
   reset(state);
   queuedDir = null;
@@ -955,6 +1066,10 @@ function restart() {
 }
 
 function handleKey(e) {
+  if (postRunAdActive) {
+    if (SCROLL_BLOCK_KEYS.has(e.key)) e.preventDefault();
+    return;
+  }
   if (settingsOpen) {
     if (e.key === "Escape") {
       e.preventDefault();
@@ -1127,7 +1242,6 @@ if (touchControls) {
 
 if (gameoverRestartBtn) {
   gameoverRestartBtn.addEventListener("click", async () => {
-    await requestInterstitial(adContext());
     restart();
     startGame();
   });

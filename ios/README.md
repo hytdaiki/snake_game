@@ -44,6 +44,7 @@ Task { await bridge.refreshEntitlementAndPushToWeb() }
 
 ## Notes
 - This is a skeleton and must be validated in a real iOS project with StoreKit test configuration.
+- Post-run interstitial ads are currently mocked in web code (15s countdown); native host can replace via `window.SnakeAdsBridge.showInterstitial`.
 - App Store submission still requires:
   - App Privacy answers in App Store Connect
   - IAP metadata/screenshots
