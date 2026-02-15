@@ -16,6 +16,9 @@ This folder contains a native bridge skeleton to replace web mock purchase logic
     - `restorePurchases`
   - Uses StoreKit 2 for purchase and restore
   - Persists entitlement in `UserDefaults`
+- `SnakeArcadeHost/`
+  - `App/` SwiftUI + `WKWebView` host skeleton
+  - `WebRoot/` bundled web assets for local in-app loading
 
 ## Product configuration
 - Product ID default: `snake.remove_ads`
