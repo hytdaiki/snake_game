@@ -57,6 +57,7 @@ const BEST_SCORE_KEY = "snake_best_score_v1";
 const UI_MODE_KEY = "snake_ui_mode_v1";
 const SWIPE_ENABLED_KEY = "snake_swipe_enabled_v1";
 const ADS_REMOVED_KEY = "snake_ads_removed_v1";
+const NATIVE_ENTITLEMENT_EVENT = "snake-storekit-entitlement";
 const LEADERBOARD_LIMIT = 10;
 const SWIPE_THRESHOLD_PX = 28;
 const OBSTACLE_EXPLOSION_MS = 330;
@@ -94,6 +95,7 @@ let swipeEnabled = loadSwipeEnabled();
 let adsRemoved = loadAdsRemoved();
 let shouldShowAds = !adsRemoved;
 let purchaseActionPending = false;
+let nativeEntitlementListenerBound = false;
 let settingsOpen = false;
 let gameStarted = false;
 let runStartedAt = 0;
@@ -217,6 +219,15 @@ function getNativePurchaseBridge() {
   const bridge = window.SnakeStoreKitBridge;
   if (!bridge || typeof bridge !== "object") return null;
   return bridge;
+}
+
+function bindNativeEntitlementListener() {
+  if (nativeEntitlementListenerBound) return;
+  nativeEntitlementListenerBound = true;
+  window.addEventListener(NATIVE_ENTITLEMENT_EVENT, (event) => {
+    const normalized = normalizeAdsRemovedResult(event?.detail);
+    if (normalized !== null) setAdsRemoved(normalized);
+  });
 }
 
 function applyAdsUi() {
@@ -1162,6 +1173,7 @@ window.addEventListener("resize", () => {
 applyUiMode();
 applySwipeSettingUi();
 applyAdsUi();
+bindNativeEntitlementListener();
 void refreshEntitlementFromBridge();
 renderLeaderboard();
 restart();
