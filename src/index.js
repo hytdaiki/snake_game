@@ -18,10 +18,14 @@ const settingsBackdropEl = document.querySelector("[data-settings-backdrop]");
 const settingsPanelEl = document.querySelector("[data-settings-panel]");
 const swipeSettingEl = document.querySelector("[data-setting-swipe]");
 const uiModeSettingEls = Array.from(document.querySelectorAll("[data-setting-ui-mode]"));
+const adsStatusEl = document.querySelector("[data-ads-status]");
+const removeAdsBtn = document.querySelector("[data-setting-remove-ads]");
+const restorePurchasesBtn = document.querySelector("[data-setting-restore-purchases]");
 const startBtn = document.querySelector("[data-start]");
 const restartBtn = document.querySelector("[data-restart]");
 const pauseBtn = document.querySelector("[data-pause]");
 const touchControls = document.querySelector("[data-controls]");
+const adSlotEl = document.querySelector("[data-ad-slot]");
 const rankingListEl = document.querySelector("[data-ranking-list]");
 const rankingResetBtn = document.querySelector("[data-ranking-reset]");
 const effectsEl = document.querySelector("[data-effects]");
@@ -52,6 +56,7 @@ const LEADERBOARD_KEY = "snake_leaderboard_v1";
 const BEST_SCORE_KEY = "snake_best_score_v1";
 const UI_MODE_KEY = "snake_ui_mode_v1";
 const SWIPE_ENABLED_KEY = "snake_swipe_enabled_v1";
+const ADS_REMOVED_KEY = "snake_ads_removed_v1";
 const LEADERBOARD_LIMIT = 10;
 const SWIPE_THRESHOLD_PX = 28;
 const OBSTACLE_EXPLOSION_MS = 330;
@@ -86,6 +91,8 @@ let leaderboard = loadLeaderboard();
 let uiModePreference = loadUiModePreference();
 let uiMode = resolveUiMode(uiModePreference);
 let swipeEnabled = loadSwipeEnabled();
+let adsRemoved = loadAdsRemoved();
+let shouldShowAds = !adsRemoved;
 let settingsOpen = false;
 let gameStarted = false;
 let runStartedAt = 0;
@@ -179,6 +186,40 @@ function saveSwipeEnabled(enabled) {
   } catch {
     // localStorage may be unavailable in restricted modes.
   }
+}
+
+function loadAdsRemoved() {
+  try {
+    return localStorage.getItem(ADS_REMOVED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveAdsRemoved(removed) {
+  try {
+    localStorage.setItem(ADS_REMOVED_KEY, removed ? "1" : "0");
+  } catch {
+    // localStorage may be unavailable in restricted modes.
+  }
+}
+
+function applyAdsUi() {
+  shouldShowAds = !adsRemoved;
+  rootEl.dataset.adsRemoved = adsRemoved ? "true" : "false";
+  if (adSlotEl) adSlotEl.hidden = !shouldShowAds;
+  if (adsStatusEl) {
+    adsStatusEl.textContent = adsRemoved
+      ? "Ads removed (mock purchase active)."
+      : "Ads enabled (non-personalized placeholder).";
+  }
+  if (removeAdsBtn) removeAdsBtn.disabled = adsRemoved;
+}
+
+function setAdsRemoved(nextRemoved) {
+  adsRemoved = Boolean(nextRemoved);
+  saveAdsRemoved(adsRemoved);
+  applyAdsUi();
 }
 
 function detectDeviceUiMode() {
@@ -562,6 +603,25 @@ async function requestInterstitial(_context) {
 // Placeholder for future ad SDK (rewarded continue once).
 async function requestRewardedContinue(_context) {
   return false;
+}
+
+const purchaseBridge = {
+  async purchaseRemoveAds() {
+    return { adsRemoved: true };
+  },
+  async restorePurchases() {
+    return { adsRemoved: loadAdsRemoved() };
+  },
+};
+
+async function handleRemoveAdsPurchase() {
+  const result = await purchaseBridge.purchaseRemoveAds();
+  if (result?.adsRemoved) setAdsRemoved(true);
+}
+
+async function handleRestorePurchases() {
+  const result = await purchaseBridge.restorePurchases();
+  setAdsRemoved(Boolean(result?.adsRemoved));
 }
 
 async function shareScore() {
@@ -952,6 +1012,18 @@ if (swipeSettingEl) {
   });
 }
 
+if (removeAdsBtn) {
+  removeAdsBtn.addEventListener("click", async () => {
+    await handleRemoveAdsPurchase();
+  });
+}
+
+if (restorePurchasesBtn) {
+  restorePurchasesBtn.addEventListener("click", async () => {
+    await handleRestorePurchases();
+  });
+}
+
 for (const input of uiModeSettingEls) {
   input.addEventListener("change", () => {
     if (!input.checked) return;
@@ -1023,5 +1095,6 @@ window.addEventListener("resize", () => {
 
 applyUiMode();
 applySwipeSettingUi();
+applyAdsUi();
 renderLeaderboard();
 restart();
