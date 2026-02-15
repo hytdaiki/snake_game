@@ -3,14 +3,14 @@
 > Source of truth: Apple App Review Guidelines and Apple Developer docs.
 > Last reviewed: 2026-02-15
 
-## Official references
-- App Review Guidelines: https://developer.apple.com/app-store/review/guidelines/
-- In-App Purchase overview: https://developer.apple.com/in-app-purchase/
-- In-App Purchase configuration in App Store Connect: https://developer.apple.com/help/app-store-connect/manage-in-app-purchases/
-- App Privacy details: https://developer.apple.com/app-store/app-privacy-details/
-- User privacy and data use: https://developer.apple.com/app-store/user-privacy-and-data-use/
+## Official References
+- [App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/)
+- [In-App Purchase overview](https://developer.apple.com/in-app-purchase/)
+- [In-App Purchase configuration in App Store Connect](https://developer.apple.com/help/app-store-connect/manage-in-app-purchases/)
+- [App Privacy details](https://developer.apple.com/app-store/app-privacy-details/)
+- [User privacy and data use](https://developer.apple.com/app-store/user-privacy-and-data-use/)
 
-## 0. App summary
+## 0. App Summary
 - App name: snake_game (working title: Snake Arcade)
 - Category: Games (Casual / Arcade)
 - Age rating target: 4+
@@ -19,6 +19,7 @@
 - User Generated Content: none
 
 ## 1. Payments / Monetization
+
 ### 1.1 In-App Purchase rule (Guideline 3.1.1)
 - Requirement: Digital goods or feature unlocks sold in app must use Apple IAP. Restore is required.
 - Our plan:
@@ -26,7 +27,7 @@
   - [x] IAP (Remove Ads, non-consumable)
 - Product design:
   - Product type: Non-Consumable
-  - Product id example: `snake.remove_ads`
+  - Product ID example: `snake.remove_ads`
   - Entitlement: `adsRemoved=true`
   - Restore: required and visible in app settings
 - Evidence:
@@ -49,6 +50,7 @@
   - Avoid accidental taps near movement controls.
 
 ## 2. Privacy / Data
+
 ### 2.1 Privacy policy availability (Guideline 5.1.1)
 - Requirement: If collecting user or usage data, provide clear disclosure and policy as needed.
 - Our policy baseline:
@@ -96,7 +98,7 @@
 - [ ] No third-party marks used without permission
 
 ## 5. App Privacy answer template (non-tracking baseline)
-Use this as a starting point in App Store Connect, then verify against actual SDK behavior:
+Use this as a starting point in App Store Connect, then verify against actual SDK behavior.
 
 - Do you track users across apps/websites?: `No`
 - Is ATT prompt used?: `No`
@@ -106,15 +108,15 @@ Use this as a starting point in App Store Connect, then verify against actual SD
 - Diagnostics/analytics: `No` by default (set `Yes` only when actually enabled)
 
 ## 6. Review Notes template (copy into App Store Connect)
-Use the following review note template per build:
+Use the following review note template per build.
 
 - This app is free-to-play with a non-personalized ad placeholder/banner and one non-consumable IAP: Remove Ads.
 - Tracking is not used. ATT prompt is not shown.
 - IAP product: `snake.remove_ads` (non-consumable).
-- How to remove ads: Open Settings (gear) -> tap "Remove Ads".
-- How to restore purchases: Open Settings (gear) -> tap "Restore Purchases".
+- How to remove ads: Open Settings (gear) and tap "Remove Ads".
+- How to restore purchases: Open Settings (gear) and tap "Restore Purchases".
 - Expected behavior after successful purchase/restore: ad slot is hidden immediately and remains hidden on next launch.
-- If review environment lacks a purchasable account, please validate restore/purchase flow UI and entitlement handling only.
+- If review environment lacks a purchasable account, validate restore/purchase flow UI and entitlement handling only.
 
 ## 7. Release checklist (App Store Connect)
 - [ ] Bundle ID, signing, and build upload complete

@@ -11,7 +11,7 @@ Last updated: 2026-02-15
 - [ ] Create non-consumable IAP product (example: `snake.remove_ads`).
 - [ ] Add localized product display name and description.
 - [ ] Provide IAP review screenshot(s) showing where purchase is initiated.
-- [ ] Ensure "Restore Purchases" is accessible in settings.
+- [ ] Ensure "Restore Purchases" is accessible in Settings.
 
 ## 3. Privacy and policy
 - [ ] Complete App Privacy questionnaire.
