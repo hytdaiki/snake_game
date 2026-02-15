@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Snake Arcade</title>
+    <meta
+      name="description"
+      content="Snake Arcade with level speed-up, bomb obstacles, ranking, and desktop/mobile controls."
+    />
+    <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
+    <link rel="stylesheet" href="./styles.css?v=20260209" />
+  </head>
+  <body>
+    <main tabindex="0" data-root>
+      <section class="card">
+        <div class="header">
+          <div class="header-left">
+            <h1 class="title">Snake Arcade</h1>
+          </div>
+          <div class="header-right">
+            <button
+              type="button"
+              class="icon-btn"
+              data-settings-open
+              aria-label="Open settings"
+              aria-haspopup="dialog"
+              aria-controls="settings-panel"
+              title="Settings"
+            >
+              <span aria-hidden="true">⚙</span>
+            </button>
+            <div class="meta-stack">
+              <div class="meta">
+                Score: <span data-score>0</span> • Best: <span data-best-score>0</span> •
+                <span data-status>Running</span>
+              </div>
+              <div class="meta">
+                Level <span data-level>1</span> • Speed <span data-speed>240ms</span> • Obstacles
+                <span data-obstacles>0</span> • Board <span data-board-size>15x15</span>
+              </div>
+              <div class="meta">UI Mode: <span data-ui-mode-label>auto</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="board-wrap" data-board-wrap tabindex="0">
+          <div class="grid" data-grid></div>
+          <div class="effects-layer" data-effects aria-hidden="true"></div>
+          <div class="overlay" data-overlay hidden>Paused</div>
+          <div class="gameover-panel" data-gameover hidden>
+            <div class="gameover-card" data-gameover-card>
+              <p class="gameover-title">Game Over</p>
+              <p class="gameover-score-label">Score</p>
+              <p class="gameover-score" data-gameover-score>0</p>
+              <p class="gameover-best">Best <span data-gameover-best>0</span></p>
+              <p class="gameover-tier" data-gameover-tier hidden></p>
+              <div class="gameover-actions">
+                <button type="button" data-gameover-continue disabled title="Rewarded continue coming soon">
+                  Continue once
+                </button>
+                <button type="button" data-gameover-restart>Restart</button>
+                <button type="button" data-gameover-share>Share</button>
+                <button type="button" data-gameover-close>Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-zone" data-control-zone>
+          <div class="controls">
+            <button type="button" data-start>New Game</button>
+            <button type="button" data-pause>Pause</button>
+            <button type="button" data-restart>
+              Restart <span class="kbd-hint" aria-hidden="true">(R)</span>
+            </button>
+            <span class="meta hint-desktop">Move: arrows or WASD</span>
+            <span class="meta hint-mobile">Move: tap arrows or swipe board</span>
+          </div>
+
+          <section class="ad-slot" data-ad-slot aria-label="Advertisement">
+            <p class="ad-slot-label">Ad (placeholder)</p>
+          </section>
+
+          <div class="touch-controls" data-controls aria-label="Arcade D-pad">
+            <button type="button" data-dir="up" aria-label="Move up">↑</button>
+            <button type="button" data-dir="left" aria-label="Move left">←</button>
+            <button type="button" data-dir="down" aria-label="Move down">↓</button>
+            <button type="button" data-dir="right" aria-label="Move right">→</button>
+          </div>
+        </div>
+
+        <section class="ranking" aria-live="polite">
+          <div class="ranking-header">
+            <h2 class="ranking-title">Top 10 Ranking</h2>
+            <button type="button" data-ranking-reset>Reset Ranking</button>
+          </div>
+          <ol class="ranking-list" data-ranking-list></ol>
+        </section>
+      </section>
+
+      <div class="settings-backdrop" data-settings-backdrop hidden></div>
+      <section
+        class="settings-panel"
+        id="settings-panel"
+        data-settings-panel
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+        hidden
+      >
+        <div class="settings-card">
+          <div class="settings-header">
+            <h2 class="settings-title" id="settings-title">Settings</h2>
+            <button type="button" class="icon-btn" data-settings-close aria-label="Close settings">
+              <span aria-hidden="true">✕</span>
+            </button>
+          </div>
+          <div class="settings-body">
+            <label class="settings-row">
+              <span>Swipe/Flick control</span>
+              <input type="checkbox" data-setting-swipe />
+            </label>
+
+            <fieldset class="settings-fieldset">
+              <legend>UI mode override</legend>
+              <label class="settings-option">
+                <input type="radio" name="ui-mode-override" value="auto" data-setting-ui-mode />
+                Auto
+              </label>
+              <label class="settings-option">
+                <input type="radio" name="ui-mode-override" value="mobile" data-setting-ui-mode />
+                Mobile
+              </label>
+              <label class="settings-option">
+                <input type="radio" name="ui-mode-override" value="desktop" data-setting-ui-mode />
+                Desktop
+              </label>
+            </fieldset>
+
+            <fieldset class="settings-fieldset">
+              <legend>Monetization</legend>
+              <p class="settings-note" data-ads-status>Ads enabled (non-personalized placeholder).</p>
+              <p class="settings-note">
+                Purchases are mocked in the web build; this will be replaced by StoreKit on iOS.
+              </p>
+              <div class="settings-actions">
+                <button type="button" data-setting-remove-ads>Remove Ads (mock purchase)</button>
+                <button type="button" data-setting-restore-purchases>Restore Purchases (mock)</button>
+              </div>
+            </fieldset>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./src/index.js?v=20260209"></script>
+  </body>
+</html>
