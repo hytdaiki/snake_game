@@ -93,6 +93,7 @@ let uiMode = resolveUiMode(uiModePreference);
 let swipeEnabled = loadSwipeEnabled();
 let adsRemoved = loadAdsRemoved();
 let shouldShowAds = !adsRemoved;
+let purchaseActionPending = false;
 let settingsOpen = false;
 let gameStarted = false;
 let runStartedAt = 0;
@@ -204,6 +205,20 @@ function saveAdsRemoved(removed) {
   }
 }
 
+function normalizeAdsRemovedResult(result) {
+  if (typeof result === "boolean") return result;
+  if (result && typeof result === "object" && typeof result.adsRemoved === "boolean") {
+    return result.adsRemoved;
+  }
+  return null;
+}
+
+function getNativePurchaseBridge() {
+  const bridge = window.SnakeStoreKitBridge;
+  if (!bridge || typeof bridge !== "object") return null;
+  return bridge;
+}
+
 function applyAdsUi() {
   shouldShowAds = !adsRemoved;
   rootEl.dataset.adsRemoved = adsRemoved ? "true" : "false";
@@ -213,12 +228,18 @@ function applyAdsUi() {
       ? "Ads removed (mock purchase active)."
       : "Ads enabled (non-personalized placeholder).";
   }
-  if (removeAdsBtn) removeAdsBtn.disabled = adsRemoved;
+  if (removeAdsBtn) removeAdsBtn.disabled = adsRemoved || purchaseActionPending;
+  if (restorePurchasesBtn) restorePurchasesBtn.disabled = purchaseActionPending;
 }
 
 function setAdsRemoved(nextRemoved) {
   adsRemoved = Boolean(nextRemoved);
   saveAdsRemoved(adsRemoved);
+  applyAdsUi();
+}
+
+function setPurchaseActionPending(isPending) {
+  purchaseActionPending = Boolean(isPending);
   applyAdsUi();
 }
 
@@ -605,23 +626,68 @@ async function requestRewardedContinue(_context) {
   return false;
 }
 
+// iOS bridge contract (optional):
+// window.SnakeStoreKitBridge = {
+//   getAdsRemovedStatus: async () => ({ adsRemoved: boolean }),
+//   purchaseRemoveAds: async () => ({ adsRemoved: boolean }),
+//   restorePurchases: async () => ({ adsRemoved: boolean }),
+// };
 const purchaseBridge = {
+  async getEntitlement() {
+    const nativeBridge = getNativePurchaseBridge();
+    if (nativeBridge && typeof nativeBridge.getAdsRemovedStatus === "function") {
+      return nativeBridge.getAdsRemovedStatus();
+    }
+    return { adsRemoved: loadAdsRemoved(), source: "local" };
+  },
   async purchaseRemoveAds() {
-    return { adsRemoved: true };
+    const nativeBridge = getNativePurchaseBridge();
+    if (nativeBridge && typeof nativeBridge.purchaseRemoveAds === "function") {
+      return nativeBridge.purchaseRemoveAds();
+    }
+    return { adsRemoved: true, source: "mock" };
   },
   async restorePurchases() {
-    return { adsRemoved: loadAdsRemoved() };
+    const nativeBridge = getNativePurchaseBridge();
+    if (nativeBridge && typeof nativeBridge.restorePurchases === "function") {
+      return nativeBridge.restorePurchases();
+    }
+    return { adsRemoved: loadAdsRemoved(), source: "local" };
   },
 };
 
+async function refreshEntitlementFromBridge() {
+  try {
+    const result = await purchaseBridge.getEntitlement();
+    const normalized = normalizeAdsRemovedResult(result);
+    if (normalized !== null) setAdsRemoved(normalized);
+  } catch {
+    // Keep local cached value if bridge is unavailable.
+  }
+}
+
 async function handleRemoveAdsPurchase() {
-  const result = await purchaseBridge.purchaseRemoveAds();
-  if (result?.adsRemoved) setAdsRemoved(true);
+  if (purchaseActionPending) return;
+  setPurchaseActionPending(true);
+  try {
+    const result = await purchaseBridge.purchaseRemoveAds();
+    const normalized = normalizeAdsRemovedResult(result);
+    if (normalized !== null) setAdsRemoved(normalized);
+  } finally {
+    setPurchaseActionPending(false);
+  }
 }
 
 async function handleRestorePurchases() {
-  const result = await purchaseBridge.restorePurchases();
-  setAdsRemoved(Boolean(result?.adsRemoved));
+  if (purchaseActionPending) return;
+  setPurchaseActionPending(true);
+  try {
+    const result = await purchaseBridge.restorePurchases();
+    const normalized = normalizeAdsRemovedResult(result);
+    if (normalized !== null) setAdsRemoved(normalized);
+  } finally {
+    setPurchaseActionPending(false);
+  }
 }
 
 async function shareScore() {
@@ -1096,5 +1162,6 @@ window.addEventListener("resize", () => {
 applyUiMode();
 applySwipeSettingUi();
 applyAdsUi();
+void refreshEntitlementFromBridge();
 renderLeaderboard();
 restart();
