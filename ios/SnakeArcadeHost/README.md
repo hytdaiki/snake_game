@@ -23,6 +23,8 @@ This folder provides a minimal iOS host shell around the existing web game.
   - `purchaseRemoveAds`
   - `restorePurchases`
 - Native bridge returns `{ adsRemoved: Bool }` and dispatches entitlement updates.
+- Interstitial ads after each run are currently web-mocked (15s).
+  - Optional native replacement: implement `window.SnakeAdsBridge.showInterstitial(...)` in the host app.
 
 ## Notes
 - This is a skeleton, not a full signed release project.
